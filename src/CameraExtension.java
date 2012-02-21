@@ -14,20 +14,25 @@ import java.awt.image.BufferedImage;
 import java.awt.image.ColorConvertOp;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
+import java.util.Iterator;
 
 /**
  */
 public class CameraExtension extends WPICameraExtension {
 
+    public static final double HUE_MAX_THRESHOLD = .18;
+    public static final double SATURATION_MIN_THRESHOLD = .17;
+    public static final double VALUE_MIN_THRESHOLD = .8;
+    private final PolygonFinder polygonFinder;
+
+    public CameraExtension() {
+        polygonFinder = new PolygonFinder();
+    }
+
     @Override
     public WPIImage processImage(WPIColorImage rawImage) {
-//        IplImage iplImage = new WpiImageWrapper(rawImage).getImage();
-//        cvConvertImage(iplImage, iplImage, CV_RGB2HSV_FULL);
-//        return new WPIImage(iplImage);
-//        BufferedImage bufferedImage = rawImage.getBufferedImage();
-
-//        threshholdImage = image.thresholdRGB(25, 255, 0, 45, 0, 47);
         BufferedImage bufferedImage = rawImage.getBufferedImage();
         BufferedImage outputImage = new BufferedImage(rawImage.getWidth(),rawImage.getHeight(),BufferedImage.TYPE_INT_RGB);
         for (int i = 0; i < bufferedImage.getWidth(); i++) {
@@ -36,22 +41,25 @@ public class CameraExtension extends WPICameraExtension {
                 Color color = new Color(rgb);
                 float[] hsv = new float[3];
                 Color.RGBtoHSB(color.getRed(),color.getGreen(),color.getBlue(),hsv);
-                if (hsv[0] < .15 && hsv[2] > .9) {
-                    outputImage.setRGB(i,j,-1);
+                if (hsv[0] < HUE_MAX_THRESHOLD && hsv[1] > SATURATION_MIN_THRESHOLD && hsv[2] > VALUE_MIN_THRESHOLD) {
+                    outputImage.setRGB(i,j,0xffffff);
                 } else {
-                   outputImage.setRGB(i,j,0);
+                    outputImage.setRGB(i,j,0x000000);
                 }
             }
         }
-        return new WPIColorImage(outputImage);
+        // I only do this since I can't directly create a binary image.
+        WPIColorImage threshholdImage = new WPIColorImage(outputImage);
+        WPIBinaryImage binaryImage = threshholdImage.getRedChannel().getThreshold(0);
 
-//        WPIBinaryImage redThresh = threshold(200, 255,rawImage.getRedChannel());
-//        WPIBinaryImage greenThresh = threshold(0, 45, rawImage.getGreenChannel());
-//        WPIBinaryImage blueThresh = threshold(0,47, rawImage.getBlueChannel());
-//        redThresh.and(greenThresh);
-//        redThresh.and(blueThresh);
-//
-//        return redThresh;
+        polygonFinder.clear();
+        int numPoly = polygonFinder.findPolygons(binaryImage);
+
+        for(int i = 0; i < numPoly; i++) {
+            Points polygon = polygonFinder.getPolygon(i);
+            polygon.drawFilledPolygon(outputImage.getGraphics());
+        }
+        return new WPIImage(outputImage);
     }
 
     private WPIBinaryImage threshold(int min,int max,WPIGrayscaleImage channel) {
@@ -60,7 +68,7 @@ public class CameraExtension extends WPICameraExtension {
         return threshold;
     }
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, InvocationTargetException, InterruptedException {
         String[] images = new String[] {
                 "RectangleRed4ft.jpg",
                 "Rectanglebelow.jpg",
@@ -69,8 +77,8 @@ public class CameraExtension extends WPICameraExtension {
                 "rectanglebelow4.jpg",
                 "rectanglefar4.jpg"
         };
-        CameraExtension cameraExtension = new CameraExtension();
-        CameraPreviewFrame cameraPreviewFrame = new CameraPreviewFrame();
+        final CameraExtension cameraExtension = new CameraExtension();
+        final CameraPreviewFrame cameraPreviewFrame = new CameraPreviewFrame();
 //        URL url = new URL("http://10.14.50.11/mjpg/video.mjpg");
 //        try {
 //            BufferedImage liveImage = ImageIO.read(url.openStream());
@@ -78,17 +86,30 @@ public class CameraExtension extends WPICameraExtension {
 //        } catch (Exception e) {
 //            e.printStackTrace();
 //        }
-        for (String image : images) {
-            WPIColorImage originalImage = new WPIColorImage(ImageIO.read(new File(image)));
-            WPIImage thresholdImage = cameraExtension.processImage(originalImage);
+        for (final String image : images) {
+            cameraExtension.polygonFinder.clear();
+            final WPIColorImage originalImage = new WPIColorImage(ImageIO.read(new File(image)));
+            final WPIImage thresholdImage = cameraExtension.processImage(originalImage);
 
-            JFrame frame = new JFrame("Preview Window: " + image);
-            cameraPreviewFrame.setStillImage(thresholdImage.getBufferedImage());
-            cameraPreviewFrame.setOriginalImage(originalImage.getBufferedImage());
-            frame.getContentPane().add(cameraPreviewFrame.getContentPane());
-            frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-            frame.pack();
-            frame.setVisible(true);
+            SwingUtilities.invokeAndWait(new Runnable() {
+                @Override
+                public void run() {
+                    JFrame frame = new JFrame("Preview Window: " + image);
+                    cameraPreviewFrame.setStillImage(thresholdImage.getBufferedImage());
+                    cameraPreviewFrame.setOriginalImage(originalImage.getBufferedImage());
+                    frame.getContentPane().add(cameraPreviewFrame.getContentPane());
+                    frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+                    frame.pack();
+                    frame.setVisible(true);
+                    System.out.println("Polygons for: " + image);
+                    Iterator<Points> iterator = cameraExtension.polygonFinder.iterator();
+                    while (iterator.hasNext()) {
+                        Points poly = iterator.next();
+                        System.out.println(poly);
+                        poly.drawPolygonOutline(originalImage.getBufferedImage().getGraphics());
+                    }
+                }
+            });
         }
     }
     
