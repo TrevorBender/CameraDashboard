@@ -49,6 +49,8 @@ import static com.googlecode.javacv.cpp.opencv_imgproc.*;
 public class PolygonFinder {
 
     private final static double EXPECTED_ASPECT_RATIO = 24.0 / 18.0;
+    public static final double RECTANGLE_SCORE_THRESHOLD = .75;
+    public static final double ASPECT_SCORE_THRESHOLD = .8;
 
     private int minPoints;
     private int maxPoints;
@@ -230,7 +232,7 @@ public class PolygonFinder {
                     double rectangleScore = (double) area / (width * height);
                     double measuredAspectRatio = (double)poly.getWidth() / (double)poly.getHeight();
                     double aspectRatioScore = 1.0 - Math.abs(measuredAspectRatio - EXPECTED_ASPECT_RATIO) / measuredAspectRatio;
-                    if (rectangleScore > .75 && aspectRatioScore > .8) {
+                    if (rectangleScore > RECTANGLE_SCORE_THRESHOLD && aspectRatioScore > ASPECT_SCORE_THRESHOLD) {
                         ppolys.add(Points.fromWPIPolygon(poly));
                         boundingBoxes.add(new Dimension(width, height));
                         fnd++;

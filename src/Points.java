@@ -116,7 +116,7 @@ public class Points {
         int n = size();
         for (int i = 0; i < n; i++) {
             int j = (i + 1) % n;
-            g.setColor(Color.GREEN);
+            g.setColor(Color.RED);
             g.drawLine(getX(i), getY(i), getX(j), getY(j));
         }
     }
