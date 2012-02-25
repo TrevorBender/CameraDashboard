@@ -17,7 +17,7 @@ import java.util.NoSuchElementException;
  */
 public class CameraExtension extends WPICameraExtension {
 
-    public static double HUE_MAX_THRESHOLD = .1255;
+    public static double HUE_MAX_THRESHOLD = .1176;
     public static double SATURATION_MIN_THRESHOLD = .17;
     public static double VALUE_MIN_THRESHOLD = .8;
     
@@ -88,13 +88,20 @@ public class CameraExtension extends WPICameraExtension {
                 }
             }
             Graphics graphics = outputImage.getGraphics();
+
             if (!insideOtherPoly) {
                 independentPolygons.add(polygon);
                 graphics.setColor(Color.RED);
                 graphics.drawPolygon(polygon);
-                double distance = calculateDistance(polygon);
-                graphics.setColor(Color.BLUE);
-                graphics.drawString(String.format("distance = %.2f", distance), 20, 20);
+                double angle = calculateAngle(polygon);
+                double distance = calculateDistance(polygon, angle);
+                double x = polygon.getBounds().getX();
+                double y = polygon.getBounds().getY();
+                graphics.setColor(Color.BLACK);
+                graphics.fillRoundRect((int)x,(int)y-20,(int)polygon.getBounds().getWidth(),20,5,5);
+                graphics.setColor(Color.YELLOW);
+                graphics.setFont(new Font("Arial", Font.BOLD, 10));
+                graphics.drawString(String.format("%.2f ft, %.2f deg", distance, angle), (int) x, (int) y - 5);
             } else {
                 graphics.setColor(Color.GREEN);
                 graphics.drawPolygon(polygon);
@@ -126,7 +133,7 @@ public class CameraExtension extends WPICameraExtension {
     private static final double fovInRadians = fovInDegrees * Math.PI / 180.0;
     private static final double cameraImageWidthInPx = 640.0;
 
-    private double calculateDistance(Polygon polygon) {
+    private double calculateDistance(Polygon polygon, double angle_deg) {
         // the fov of the camera is 56 deg.
         // the resolution of the camera is 640x480 px
         // the rectangle target width is 2 ft
@@ -134,8 +141,20 @@ public class CameraExtension extends WPICameraExtension {
 
         // target width in px
         int width = (int) polygon.getBounds2D().getWidth();
-        double distance = cameraImageWidthInPx / (width * Math.tan(fovInRadians));
-        System.out.printf("distance = %.2f ft\n", distance);
-        return distance;
+        double distance_ft = cameraImageWidthInPx / (width * Math.tan(fovInRadians));
+        double tangent_ft = distance_ft * Math.cos(angle_deg * Math.PI / 180.0);
+        System.out.printf("distance = %.2f ft\n", tangent_ft);
+        return tangent_ft;
+    }
+
+    // It's just geometry and math!
+    private double calculateAngle(Polygon polygon) {
+        int centerX = (int) polygon.getBounds2D().getCenterX();
+        double offset_px = centerX - 640 / 2;
+        double targetWidth_px = polygon.getBounds2D().getWidth();
+        double targetAngle_rad = Math.atan(offset_px / targetWidth_px * Math.tan(fovInRadians));
+        double targetAngle_deg = targetAngle_rad * 180.0 / Math.PI;
+        System.out.printf("angle = %.2f deg\n",targetAngle_deg);
+        return targetAngle_deg;
     }
 }

@@ -24,6 +24,7 @@ public class CameraPreviewFrame {
     private JSlider hueMaxThreshSlider;
     private JSlider satMinThreshSlider;
     private JSlider valueMinThreshSlider;
+    private JPanel sliderPanel;
     private final DefaultBoundedRangeModel hueSliderModel;
     final CameraExtension cameraExtension = new CameraExtension();
     private BufferedImage originalImage;
@@ -76,23 +77,6 @@ public class CameraPreviewFrame {
         reprocess();
     }
 
-    SwingWorker<BufferedImage,Void> reprocessWorker = new SwingWorker<BufferedImage,Void>() {
-        @Override
-        protected BufferedImage doInBackground() throws Exception {
-            cameraExtension.polygonFinder.clear();
-            WPIImage processedImage = cameraExtension.processImage(new WPIColorImage(originalImage));
-            return processedImage.getBufferedImage();
-        }
-
-        @Override
-        protected void done() {
-            try {
-                stillImageIcon.setIcon(new ImageIcon(get()));
-            } catch (InterruptedException ignored) {
-            } catch (ExecutionException ignored) {
-            }
-        }
-    };
     private void reprocess() {
         cameraExtension.polygonFinder.clear();
         WPIImage processedImage = cameraExtension.processImage(new WPIColorImage(originalImage));
@@ -111,9 +95,9 @@ public class CameraPreviewFrame {
                 "newrectangle_titleright.jpg",
                 "rectanglefar4.jpg"
         };
-        final CameraPreviewFrame cameraPreviewFrame = new CameraPreviewFrame();
         for (final String image : images) {
-            BufferedImage bufferedImage = ImageIO.read(new File(image));
+            final CameraPreviewFrame cameraPreviewFrame = new CameraPreviewFrame();
+            final BufferedImage bufferedImage = ImageIO.read(new File(image));
             cameraPreviewFrame.processImage(bufferedImage);
 
             SwingUtilities.invokeAndWait(new Runnable() {
@@ -121,7 +105,7 @@ public class CameraPreviewFrame {
                 public void run() {
                     JFrame frame = new JFrame("Preview Window: " + image);
                     frame.getContentPane().add(cameraPreviewFrame.main);
-                    frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+                    frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
                     frame.pack();
                     frame.setVisible(true);
                 }
