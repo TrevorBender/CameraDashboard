@@ -6,11 +6,12 @@ import com.googlecode.javacpp.Loader;
 import edu.wpi.first.wpijavacv.WPIBinaryImage;
 import edu.wpi.first.wpijavacv.WPIContour;
 import edu.wpi.first.wpijavacv.WPIPolygon;
-import java.awt.Dimension;
-import java.awt.Graphics;
+
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import static com.googlecode.javacv.cpp.opencv_core.*;
 import static com.googlecode.javacv.cpp.opencv_imgproc.*;
 
@@ -212,7 +213,7 @@ public class PolygonFinder {
      *
      * @return Number of polygons found.
      */
-    public int findPolygons(WPIBinaryImage img) {
+    public List<Polygon> findPolygons(WPIBinaryImage img) {
         int fnd = 0;
 
         WPIContour[] contours = img.findContours();
@@ -242,8 +243,11 @@ public class PolygonFinder {
                 }
             }
         }
-
-        return fnd;
+        List<Polygon> polygonList = new ArrayList<Polygon>(ppolys.size());
+        for (Points points : ppolys) {
+            polygonList.add(points.toPolygon());
+        }
+        return polygonList;
     }
 
     /**

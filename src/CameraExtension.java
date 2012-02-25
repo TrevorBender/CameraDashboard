@@ -1,8 +1,15 @@
 import edu.wpi.first.smartdashboard.camera.WPICameraExtension;
 import edu.wpi.first.wpijavacv.*;
+import edu.wpi.first.wpilibj.networking.NetworkTable;
 
+import javax.swing.*;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.NoSuchElementException;
 
 /**
  * The camera extension will do the image processing to detect rectangles.
@@ -10,14 +17,37 @@ import java.awt.image.BufferedImage;
  */
 public class CameraExtension extends WPICameraExtension {
 
-    public static final double HUE_MAX_THRESHOLD = .18;
-    public static final double SATURATION_MIN_THRESHOLD = .17;
-    public static final double VALUE_MIN_THRESHOLD = .8;
+    public static double HUE_MAX_THRESHOLD = .1255;
+    public static double SATURATION_MIN_THRESHOLD = .17;
+    public static double VALUE_MIN_THRESHOLD = .8;
+    
+    public static int doubleToInt(double val) {
+        return (int) (val * 255);
+    }
+    public static double intToDouble(int value) {
+        return (double) value / 255.0;
+    }
 
     final PolygonFinder polygonFinder;
 
     public CameraExtension() {
         polygonFinder = new PolygonFinder();
+    }
+
+    @Override
+    public void init() {
+        super.init();
+        {
+            final DefaultBoundedRangeModel brm = new DefaultBoundedRangeModel(doubleToInt(HUE_MAX_THRESHOLD), 0, 0, 255);
+            brm.addChangeListener(new ChangeListener() {
+                @Override
+                public void stateChanged(ChangeEvent e) {
+                    HUE_MAX_THRESHOLD = intToDouble(brm.getValue());
+                }
+            });
+            JSlider hueMaxSlider = new JSlider(brm);
+            add(hueMaxSlider);
+        }
     }
 
     /**
@@ -32,19 +62,45 @@ public class CameraExtension extends WPICameraExtension {
         BufferedImage outputImage = new BufferedImage(rawImage.getWidth(),rawImage.getHeight(),BufferedImage.TYPE_INT_RGB);
         WPIBinaryImage binaryImage = threshold(bufferedImage, outputImage);
 
-        detectRectangles(outputImage, binaryImage);
+        List<Polygon> rectangles = detectRectangles(outputImage, binaryImage);
+        // test network table communication
+        NetworkTable networkTable = NetworkTable.getTable("Camera");
+        try {
+            String s = networkTable.getString("hello");
+            outputImage.getGraphics().drawString(s,10,10);
+        } catch (NoSuchElementException ignored) {
+        }
         return new WPIImage(outputImage);
     }
 
-    private void detectRectangles(BufferedImage outputImage, WPIBinaryImage binaryImage) {
+    private List<Polygon> detectRectangles(BufferedImage outputImage, WPIBinaryImage binaryImage) {
         polygonFinder.clear();
-        int numPoly = polygonFinder.findPolygons(binaryImage);
+        List<Polygon> polygons = polygonFinder.findPolygons(binaryImage);
 
-        for(int i = 0; i < numPoly; i++) {
-            Points polygon = polygonFinder.getPolygon(i);
-            polygon.drawPolygonOutline(outputImage.getGraphics());
-            calculateDistances(polygon);
+        List<Polygon> independentPolygons = new ArrayList<Polygon>();
+        for (Polygon polygon : polygons) {
+            boolean insideOtherPoly = false;
+            for (Polygon otherPolygon : polygons) {
+                insideOtherPoly = otherPolygon.contains(polygon.getBounds2D());
+                if (insideOtherPoly) {
+                    System.out.println("detected poly inside other");
+                    break;
+                }
+            }
+            Graphics graphics = outputImage.getGraphics();
+            if (!insideOtherPoly) {
+                independentPolygons.add(polygon);
+                graphics.setColor(Color.RED);
+                graphics.drawPolygon(polygon);
+                double distance = calculateDistance(polygon);
+                graphics.setColor(Color.BLUE);
+                graphics.drawString(String.format("distance = %.2f", distance), 20, 20);
+            } else {
+                graphics.setColor(Color.GREEN);
+                graphics.drawPolygon(polygon);
+            }
         }
+        return independentPolygons;
     }
 
     private WPIBinaryImage threshold(BufferedImage bufferedImage, BufferedImage outputImage) {
@@ -66,8 +122,20 @@ public class CameraExtension extends WPICameraExtension {
         return threshholdImage.getRedChannel().getThreshold(0);
     }
 
-    private void calculateDistances(Points polygon) {
-        //todo: calculate distances using fov
+    private static final double fovInDegrees = 56.0 / 2.0; // we only consider half the fov to make the math simpler
+    private static final double fovInRadians = fovInDegrees * Math.PI / 180.0;
+    private static final double cameraImageWidthInPx = 640.0;
+
+    private double calculateDistance(Polygon polygon) {
         // the fov of the camera is 56 deg.
+        // the resolution of the camera is 640x480 px
+        // the rectangle target width is 2 ft
+        // the rest is math and geometry!
+
+        // target width in px
+        int width = (int) polygon.getBounds2D().getWidth();
+        double distance = cameraImageWidthInPx / (width * Math.tan(fovInRadians));
+        System.out.printf("distance = %.2f ft\n", distance);
+        return distance;
     }
 }

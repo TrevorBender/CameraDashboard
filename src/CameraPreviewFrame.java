@@ -1,14 +1,18 @@
 import edu.wpi.first.wpijavacv.WPIColorImage;
 import edu.wpi.first.wpijavacv.WPIImage;
+import edu.wpi.first.wpilibj.networking.NetworkTable;
+import sun.awt.image.BufImgSurfaceData;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
-import java.awt.*;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Iterator;
+import java.util.concurrent.ExecutionException;
 
 /**
  * This requires IntelliJ to build.
@@ -17,55 +21,109 @@ public class CameraPreviewFrame {
     private JLabel originalImageIcon;
     private JLabel stillImageIcon;
     private JPanel main;
+    private JSlider hueMaxThreshSlider;
+    private JSlider satMinThreshSlider;
+    private JSlider valueMinThreshSlider;
+    private final DefaultBoundedRangeModel hueSliderModel;
+    final CameraExtension cameraExtension = new CameraExtension();
+    private BufferedImage originalImage;
+    private final DefaultBoundedRangeModel satSliderModel;
+    private final DefaultBoundedRangeModel valueSliderModel;
 
     public CameraPreviewFrame() {
+        hueSliderModel = new DefaultBoundedRangeModel(doubleToInt(CameraExtension.HUE_MAX_THRESHOLD), 0, 0, 255);
+        hueSliderModel.addChangeListener(new ChangeListener() {
+            @Override
+            public void stateChanged(ChangeEvent e) {
+                CameraExtension.HUE_MAX_THRESHOLD = intToDouble(hueSliderModel.getValue());
+                System.out.println("New hue max thresh = " + CameraExtension.HUE_MAX_THRESHOLD);
+                reprocess();
+            }
+        });
+        hueMaxThreshSlider.setModel(hueSliderModel);
+        satSliderModel = new DefaultBoundedRangeModel(doubleToInt(CameraExtension.SATURATION_MIN_THRESHOLD), 0, 0, 255);
+        satSliderModel.addChangeListener(new ChangeListener() {
+            @Override
+            public void stateChanged(ChangeEvent e) {
+                CameraExtension.SATURATION_MIN_THRESHOLD = intToDouble(satSliderModel.getValue());
+                System.out.println("New sat min thresh = " + CameraExtension.SATURATION_MIN_THRESHOLD);
+                reprocess();
+            }
+        });
+        satMinThreshSlider.setModel(satSliderModel);
+        valueSliderModel = new DefaultBoundedRangeModel(doubleToInt(CameraExtension.VALUE_MIN_THRESHOLD), 0, 0, 255);
+        valueMinThreshSlider.setModel(valueSliderModel);
+        valueSliderModel.addChangeListener(new ChangeListener() {
+            @Override
+            public void stateChanged(ChangeEvent e) {
+                CameraExtension.VALUE_MIN_THRESHOLD = intToDouble(valueSliderModel.getValue());
+                System.out.println("New val min thresh = " + CameraExtension.VALUE_MIN_THRESHOLD);
+                reprocess();
+            }
+        });
     }
 
-    public Component getContentPane() {
-        return main;
+    private int doubleToInt(double val) {
+        return (int) (val * 255);
+    }
+    private double intToDouble(int value) {
+        return (double) value / 255.0;
+    }
+    
+    private void processImage(BufferedImage image) {
+        originalImage = image;
+        originalImageIcon.setIcon(new ImageIcon(originalImage));
+        reprocess();
     }
 
-    public void setOriginalImage(BufferedImage liveImage) {
-        originalImageIcon.setIcon(new ImageIcon(liveImage));
-    }
+    SwingWorker<BufferedImage,Void> reprocessWorker = new SwingWorker<BufferedImage,Void>() {
+        @Override
+        protected BufferedImage doInBackground() throws Exception {
+            cameraExtension.polygonFinder.clear();
+            WPIImage processedImage = cameraExtension.processImage(new WPIColorImage(originalImage));
+            return processedImage.getBufferedImage();
+        }
 
-    public void setStillImage(BufferedImage bufferedImage) {
-        stillImageIcon.setIcon(new ImageIcon(bufferedImage));
+        @Override
+        protected void done() {
+            try {
+                stillImageIcon.setIcon(new ImageIcon(get()));
+            } catch (InterruptedException ignored) {
+            } catch (ExecutionException ignored) {
+            }
+        }
+    };
+    private void reprocess() {
+        cameraExtension.polygonFinder.clear();
+        WPIImage processedImage = cameraExtension.processImage(new WPIColorImage(originalImage));
+        stillImageIcon.setIcon(new ImageIcon(processedImage.getBufferedImage()));
     }
 
     public static void main(String[] args) throws IOException, InvocationTargetException, InterruptedException {
+        NetworkTable.setTeam(1450);
         String[] images = new String[] {
-                "RectangleRed4ft.jpg",
-                "Rectanglebelow.jpg",
-                "rectanglebelow2.jpg",
-                "rectanglebelow3.jpg",
-                "rectanglebelow4.jpg",
+//                "RectangleRed4ft.jpg",
+//                "Rectanglebelow.jpg",
+//                "rectanglebelow2.jpg",
+//                "rectanglebelow3.jpg",
+//                "rectanglebelow4.jpg",
+                "newrectangle.jpg",
+                "newrectangle_titleright.jpg",
                 "rectanglefar4.jpg"
         };
-        final CameraExtension cameraExtension = new CameraExtension();
         final CameraPreviewFrame cameraPreviewFrame = new CameraPreviewFrame();
         for (final String image : images) {
-            cameraExtension.polygonFinder.clear();
-            final WPIColorImage originalImage = new WPIColorImage(ImageIO.read(new File(image)));
-            final WPIImage thresholdImage = cameraExtension.processImage(originalImage);
+            BufferedImage bufferedImage = ImageIO.read(new File(image));
+            cameraPreviewFrame.processImage(bufferedImage);
 
             SwingUtilities.invokeAndWait(new Runnable() {
                 @Override
                 public void run() {
                     JFrame frame = new JFrame("Preview Window: " + image);
-                    cameraPreviewFrame.setStillImage(thresholdImage.getBufferedImage());
-                    cameraPreviewFrame.setOriginalImage(originalImage.getBufferedImage());
-                    frame.getContentPane().add(cameraPreviewFrame.getContentPane());
-                    frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+                    frame.getContentPane().add(cameraPreviewFrame.main);
+                    frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
                     frame.pack();
                     frame.setVisible(true);
-                    System.out.println("Polygons for: " + image);
-                    Iterator<Points> iterator = cameraExtension.polygonFinder.iterator();
-                    while (iterator.hasNext()) {
-                        Points poly = iterator.next();
-                        System.out.println(poly);
-                        poly.drawPolygonOutline(originalImage.getBufferedImage().getGraphics());
-                    }
                 }
             });
         }

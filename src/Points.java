@@ -133,4 +133,66 @@ public class Points {
         g.fillPolygon(xPoints,yPoints,n);
     }
 
+    public int getWidth() {
+        int minX = 640;
+        int maxX = 0;
+       for (int i = 0; i < size(); i++) {
+           int x = getX(i);
+           if (x < minX) minX = x;
+           if (x > maxX) maxX = x;
+       }
+        return maxX - minX;
+    }
+
+    public int getMinX() {
+        int minX = 640;
+        for (int i = 0; i < size(); i++) {
+            if (getX(i) < minX) minX = getX(i);
+        }
+        return minX;
+    }
+
+    public int getMaxX() {
+        int maxX = 0;
+        for (int i = 0; i < size(); i++) {
+            if (getX(i) > maxX) maxX = getX(i);
+        }
+        return maxX;
+    }
+
+    public int getMinY() {
+        int minY = 640;
+        for (int i = 0; i < size(); i++) {
+            if (getY(i) < minY) minY = getY(i);
+        }
+        return minY;
+    }
+
+    public int getMaxY() {
+        int maxY = 0;
+        for (int i = 0; i < size(); i++) {
+            if (getY(i) > maxY) maxY = getY(i);
+        }
+        return maxY;
+    }
+
+    public boolean inside(Points other) {
+        boolean minXTest = getMinX() > other.getMinX();
+        boolean maxXTest = getMaxX() < other.getMaxX();
+        boolean minYTest = getMinY() > other.getMinY();
+        boolean maxYTest = getMaxY() < other.getMaxY();
+        return minXTest &&
+                maxXTest &&
+                minYTest &&
+                maxYTest;
+
+    }
+
+    public Polygon toPolygon() {
+        Polygon polygon = new Polygon();
+        for (int i = 0; i < size ; i++) {
+            polygon.addPoint(getX(i),getY(i));
+        }
+        return polygon;
+    }
 }
