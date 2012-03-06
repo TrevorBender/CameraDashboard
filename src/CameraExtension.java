@@ -20,7 +20,8 @@ public class CameraExtension extends WPICameraExtension {
     public static double HUE_MAX_THRESHOLD = .1176;
     public static double SATURATION_MIN_THRESHOLD = .17;
     public static double VALUE_MIN_THRESHOLD = .8;
-    
+
+
     public static int doubleToInt(double val) {
         return (int) (val * 255);
     }
@@ -38,15 +39,47 @@ public class CameraExtension extends WPICameraExtension {
     public void init() {
         super.init();
         {
-            final DefaultBoundedRangeModel brm = new DefaultBoundedRangeModel(doubleToInt(HUE_MAX_THRESHOLD), 0, 0, 255);
-            brm.addChangeListener(new ChangeListener() {
-                @Override
-                public void stateChanged(ChangeEvent e) {
-                    HUE_MAX_THRESHOLD = intToDouble(brm.getValue());
-                }
-            });
-            JSlider hueMaxSlider = new JSlider(brm);
-            add(hueMaxSlider);
+//            final DefaultBoundedRangeModel brm = new DefaultBoundedRangeModel(doubleToInt(HUE_MAX_THRESHOLD), 0, 0, 255);
+//            brm.addChangeListener(new ChangeListener() {
+//                @Override
+//                public void stateChanged(ChangeEvent e) {
+//                    HUE_MAX_THRESHOLD = intToDouble(brm.getValue());
+//                    System.out.println("Hue Thresh: " + HUE_MAX_THRESHOLD);
+//                }
+//            });
+//            JSlider hueMaxSlider = new JSlider(brm);
+//            JLabel label = new JLabel("Hue");
+//            label.setLabelFor(hueMaxSlider);
+//            add(label);
+//            add(hueMaxSlider);
+//
+//            final DefaultBoundedRangeModel satModel = new DefaultBoundedRangeModel(doubleToInt(SATURATION_MIN_THRESHOLD), 0, 0, 255);
+//            final JSlider satMinSlider = new JSlider(satModel);
+//            satModel.addChangeListener(new ChangeListener() {
+//                @Override
+//                public void stateChanged(ChangeEvent e) {
+//                    SATURATION_MIN_THRESHOLD = intToDouble(satModel.getValue());
+//                    System.out.println("Sat Thresh: " + SATURATION_MIN_THRESHOLD);
+//                }
+//            });
+//            label = new JLabel("Sat");
+//            label.setLabelFor(satMinSlider);
+//            add(label);
+//            add(satMinSlider);
+//
+//            final DefaultBoundedRangeModel valModel = new DefaultBoundedRangeModel(doubleToInt(VALUE_MIN_THRESHOLD), 0, 0, 255);
+//            JSlider valMinSlider = new JSlider(valModel);
+//            valModel.addChangeListener(new ChangeListener() {
+//                @Override
+//                public void stateChanged(ChangeEvent e) {
+//                    VALUE_MIN_THRESHOLD = intToDouble(valModel.getValue());
+//                    System.out.println("Val Thresh: " + VALUE_MIN_THRESHOLD);
+//                }
+//            });
+//            label = new JLabel("Val");
+//            label.setLabelFor(valMinSlider);
+//            add(label);
+//            add(valMinSlider);
         }
     }
 
@@ -59,18 +92,35 @@ public class CameraExtension extends WPICameraExtension {
     @Override
     public WPIImage processImage(WPIColorImage rawImage) {
         BufferedImage bufferedImage = rawImage.getBufferedImage();
-        BufferedImage outputImage = new BufferedImage(rawImage.getWidth(),rawImage.getHeight(),BufferedImage.TYPE_INT_RGB);
+        BufferedImage outputImage = rawImage.getBufferedImage(); //new BufferedImage(rawImage.getWidth(),rawImage.getHeight(),BufferedImage.TYPE_INT_RGB);
         WPIBinaryImage binaryImage = threshold(bufferedImage, outputImage);
 
         List<Polygon> rectangles = detectRectangles(outputImage, binaryImage);
-        // test network table communication
-        NetworkTable networkTable = NetworkTable.getTable("Camera");
-        try {
-            String s = networkTable.getString("hello");
-            outputImage.getGraphics().drawString(s,10,10);
-        } catch (NoSuchElementException ignored) {
+        binaryImage.dispose();
+        Polygon targetPoly = null;
+        for (Polygon rectangle : rectangles) {
+            if (targetPoly == null || rectangle.getBounds().getY() < targetPoly.getBounds().getY()) {
+                targetPoly = rectangle;
+            }
         }
+        if (targetPoly != null) {
+            Target target = createTarget(targetPoly);
+            NetworkTable networkTable = NetworkTable.getTable("TARGET");
+            target.putData(networkTable);
+        }
+        System.out.println("------------------");
+        rawImage.dispose();
         return new WPIImage(outputImage);
+    }
+
+    private Target createTarget(Polygon targetPoly) {
+        Target target = new Target();
+        target.posX = (int) targetPoly.getBounds().getX();
+        target.posY = (int) targetPoly.getBounds().getY();
+        target.angleX = calculateAngle(targetPoly);
+        target.distance = calculateDistance(targetPoly, target.angleX);
+        target.timestamp = System.currentTimeMillis();
+        return target;
     }
 
     private List<Polygon> detectRectangles(BufferedImage outputImage, WPIBinaryImage binaryImage) {
@@ -81,26 +131,27 @@ public class CameraExtension extends WPICameraExtension {
         for (Polygon polygon : polygons) {
             boolean insideOtherPoly = false;
             for (Polygon otherPolygon : polygons) {
-                insideOtherPoly = otherPolygon.contains(polygon.getBounds2D());
+                insideOtherPoly = polygon.contains(otherPolygon.getBounds2D());
                 if (insideOtherPoly) {
-                    System.out.println("detected poly inside other");
+//                    System.out.println("detected poly inside other");
                     break;
                 }
             }
             Graphics graphics = outputImage.getGraphics();
 
-            if (!insideOtherPoly) {
+            if (insideOtherPoly) {
                 independentPolygons.add(polygon);
                 graphics.setColor(Color.RED);
                 graphics.drawPolygon(polygon);
                 double angle = calculateAngle(polygon);
                 double distance = calculateDistance(polygon, angle);
+//                double offsetY = calculateOffset(polygon,distance);
                 double x = polygon.getBounds().getX();
                 double y = polygon.getBounds().getY();
                 graphics.setColor(Color.BLACK);
-                graphics.fillRoundRect((int)x,(int)y-20,(int)polygon.getBounds().getWidth(),20,5,5);
+                graphics.fillRoundRect((int) x - 5, (int) y - 20, (int) polygon.getBounds().getWidth(), 20, 5, 1);
                 graphics.setColor(Color.YELLOW);
-                graphics.setFont(new Font("Arial", Font.BOLD, 10));
+                graphics.setFont(new Font("Arial", Font.BOLD, 16));
                 graphics.drawString(String.format("%.2f ft, %.2f deg", distance, angle), (int) x, (int) y - 5);
             } else {
                 graphics.setColor(Color.GREEN);
@@ -110,7 +161,16 @@ public class CameraExtension extends WPICameraExtension {
         return independentPolygons;
     }
 
+    private double calculateOffset(Polygon polygon, double distance) {
+        double offset = 0;
+        double centerY_px = polygon.getBounds2D().getCenterY();
+        double height_px = polygon.getBounds2D().getHeight();
+        final double height = 480;
+        return offset;
+    }
+
     private WPIBinaryImage threshold(BufferedImage bufferedImage, BufferedImage outputImage) {
+        BufferedImage tempImage = new BufferedImage(bufferedImage.getWidth(),bufferedImage.getHeight(),BufferedImage.TYPE_INT_RGB);
         for (int i = 0; i < bufferedImage.getWidth(); i++) {
             for (int j = 0; j < bufferedImage.getHeight(); j++) {
                 int rgb = bufferedImage.getRGB(i,j);
@@ -118,18 +178,20 @@ public class CameraExtension extends WPICameraExtension {
                 float[] hsv = new float[3];
                 Color.RGBtoHSB(color.getRed(),color.getGreen(),color.getBlue(),hsv);
                 if (hsv[0] < HUE_MAX_THRESHOLD && hsv[1] > SATURATION_MIN_THRESHOLD && hsv[2] > VALUE_MIN_THRESHOLD) {
-                    outputImage.setRGB(i,j,0xffffff);
+                   tempImage.setRGB(i,j,0xffffff);
                 } else {
-                    outputImage.setRGB(i,j,0x000000);
+                   tempImage.setRGB(i,j,0x000000);
                 }
             }
         }
         // I only do this since I can't directly create a binary image; it has no public constructor.
-        WPIColorImage threshholdImage = new WPIColorImage(outputImage);
-        return threshholdImage.getRedChannel().getThreshold(0);
+        WPIColorImage threshholdImage = new WPIColorImage(tempImage);
+        WPIBinaryImage binaryImage = threshholdImage.getRedChannel().getThreshold(0);
+        threshholdImage.dispose();
+        return binaryImage;
     }
 
-    private static final double fovInDegrees = 56.0 / 2.0; // we only consider half the fov to make the math simpler
+    private static final double fovInDegrees = 51.0 / 2.0; // we only consider half the fov to make the math simpler
     private static final double fovInRadians = fovInDegrees * Math.PI / 180.0;
     private static final double cameraImageWidthInPx = 640.0;
 

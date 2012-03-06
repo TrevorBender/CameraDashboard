@@ -32,45 +32,38 @@ public class CameraPreviewFrame {
     private final DefaultBoundedRangeModel valueSliderModel;
 
     public CameraPreviewFrame() {
-        hueSliderModel = new DefaultBoundedRangeModel(doubleToInt(CameraExtension.HUE_MAX_THRESHOLD), 0, 0, 255);
+        hueSliderModel = new DefaultBoundedRangeModel(CameraExtension.doubleToInt(CameraExtension.HUE_MAX_THRESHOLD), 0, 0, 255);
         hueSliderModel.addChangeListener(new ChangeListener() {
             @Override
             public void stateChanged(ChangeEvent e) {
-                CameraExtension.HUE_MAX_THRESHOLD = intToDouble(hueSliderModel.getValue());
+                CameraExtension.HUE_MAX_THRESHOLD = CameraExtension.intToDouble(hueSliderModel.getValue());
                 System.out.println("New hue max thresh = " + CameraExtension.HUE_MAX_THRESHOLD);
                 reprocess();
             }
         });
         hueMaxThreshSlider.setModel(hueSliderModel);
-        satSliderModel = new DefaultBoundedRangeModel(doubleToInt(CameraExtension.SATURATION_MIN_THRESHOLD), 0, 0, 255);
+        satSliderModel = new DefaultBoundedRangeModel(CameraExtension.doubleToInt(CameraExtension.SATURATION_MIN_THRESHOLD), 0, 0, 255);
         satSliderModel.addChangeListener(new ChangeListener() {
             @Override
             public void stateChanged(ChangeEvent e) {
-                CameraExtension.SATURATION_MIN_THRESHOLD = intToDouble(satSliderModel.getValue());
+                CameraExtension.SATURATION_MIN_THRESHOLD = CameraExtension.intToDouble(satSliderModel.getValue());
                 System.out.println("New sat min thresh = " + CameraExtension.SATURATION_MIN_THRESHOLD);
                 reprocess();
             }
         });
         satMinThreshSlider.setModel(satSliderModel);
-        valueSliderModel = new DefaultBoundedRangeModel(doubleToInt(CameraExtension.VALUE_MIN_THRESHOLD), 0, 0, 255);
+        valueSliderModel = new DefaultBoundedRangeModel(CameraExtension.doubleToInt(CameraExtension.VALUE_MIN_THRESHOLD), 0, 0, 255);
         valueMinThreshSlider.setModel(valueSliderModel);
         valueSliderModel.addChangeListener(new ChangeListener() {
             @Override
             public void stateChanged(ChangeEvent e) {
-                CameraExtension.VALUE_MIN_THRESHOLD = intToDouble(valueSliderModel.getValue());
+                CameraExtension.VALUE_MIN_THRESHOLD = CameraExtension.intToDouble(valueSliderModel.getValue());
                 System.out.println("New val min thresh = " + CameraExtension.VALUE_MIN_THRESHOLD);
                 reprocess();
             }
         });
     }
 
-    private int doubleToInt(double val) {
-        return (int) (val * 255);
-    }
-    private double intToDouble(int value) {
-        return (double) value / 255.0;
-    }
-    
     private void processImage(BufferedImage image) {
         originalImage = image;
         originalImageIcon.setIcon(new ImageIcon(originalImage));
@@ -80,6 +73,10 @@ public class CameraPreviewFrame {
     private void reprocess() {
         cameraExtension.polygonFinder.clear();
         WPIImage processedImage = cameraExtension.processImage(new WPIColorImage(originalImage));
+        NetworkTable table = NetworkTable.getTable("TARGET");
+        Target target = new Target(table);
+        originalImage.getGraphics().drawString(String.format("d=%.2f; a=%.2f",target.distance,target.angleX),
+                target.posX, target.posY-5);
         stillImageIcon.setIcon(new ImageIcon(processedImage.getBufferedImage()));
     }
 
