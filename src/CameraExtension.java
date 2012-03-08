@@ -1,5 +1,6 @@
 import edu.wpi.first.smartdashboard.camera.WPICameraExtension;
 import edu.wpi.first.wpijavacv.*;
+import edu.wpi.first.wpilibj.networking.NetworkListener;
 import edu.wpi.first.wpilibj.networking.NetworkTable;
 
 import javax.swing.*;
@@ -20,6 +21,7 @@ public class CameraExtension extends WPICameraExtension {
     public static double HUE_MAX_THRESHOLD = .1176;
     public static double SATURATION_MIN_THRESHOLD = .17;
     public static double VALUE_MIN_THRESHOLD = .8;
+    private boolean detectRectangles = false;
 
 
     public static int doubleToInt(double val) {
@@ -38,6 +40,18 @@ public class CameraExtension extends WPICameraExtension {
     @Override
     public void init() {
         super.init();
+        final NetworkTable table = NetworkTable.getTable("TARGET");
+        table.addListener("detectRectangles", new NetworkListener() {
+            @Override
+            public void valueChanged(String s, Object o) {
+                detectRectangles = table.getBoolean("detectRectangles");
+                System.out.println("Detect Rectangles = " + detectRectangles);
+            }
+
+            @Override
+            public void valueConfirmed(String s, Object o) {
+            }
+        });
         {
 //            final DefaultBoundedRangeModel brm = new DefaultBoundedRangeModel(doubleToInt(HUE_MAX_THRESHOLD), 0, 0, 255);
 //            brm.addChangeListener(new ChangeListener() {
@@ -91,6 +105,7 @@ public class CameraExtension extends WPICameraExtension {
      */
     @Override
     public WPIImage processImage(WPIColorImage rawImage) {
+        if (!detectRectangles) return rawImage;
         BufferedImage bufferedImage = rawImage.getBufferedImage();
         BufferedImage outputImage = rawImage.getBufferedImage(); //new BufferedImage(rawImage.getWidth(),rawImage.getHeight(),BufferedImage.TYPE_INT_RGB);
         WPIBinaryImage binaryImage = threshold(bufferedImage, outputImage);
@@ -178,9 +193,9 @@ public class CameraExtension extends WPICameraExtension {
                 float[] hsv = new float[3];
                 Color.RGBtoHSB(color.getRed(),color.getGreen(),color.getBlue(),hsv);
                 if (hsv[0] < HUE_MAX_THRESHOLD && hsv[1] > SATURATION_MIN_THRESHOLD && hsv[2] > VALUE_MIN_THRESHOLD) {
-                   tempImage.setRGB(i,j,0xffffff);
+                   tempImage.setRGB(i, j, 0xffffff);
                 } else {
-                   tempImage.setRGB(i,j,0x000000);
+                   tempImage.setRGB(i, j, 0x000000);
                 }
             }
         }
